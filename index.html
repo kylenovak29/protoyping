@@ -1,0 +1,1684 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Harmonics Exploration</title>
+
+  <style>
+    /*
+      Page-level styles only.
+
+      The exploration's prototype CSS remains inside the JavaScript-generated
+      component below, matching the Observable version as closely as possible.
+      Once the standalone design is stable, that CSS can be extracted into a
+      shared stylesheet.
+    */
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: #fff;
+      color: #222;
+      font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    .page-shell {
+      width: min(100% - 24px, 800px);
+      margin-inline: auto;
+      padding-block: 12px 24px;
+    }
+
+    #harmonics-exploration {
+      width: 100%;
+    }
+
+    /*
+      HTML mathematical readouts use real sub/sup elements.
+      SVG notation continues to use SVG tspans.
+    */
+    #harmonics-exploration sup,
+    #harmonics-exploration sub {
+      line-height: 0;
+    }
+
+    #harmonics-exploration sup {
+      font-size: 0.75em;
+      vertical-align: 0.45em;
+    }
+
+    #harmonics-exploration sub {
+      font-size: 0.75em;
+      vertical-align: -0.2em;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page-shell">
+    <section
+      id="harmonics-exploration"
+      aria-label="Interactive harmonics exploration"
+    ></section>
+
+    <noscript>
+      This interactive exploration requires JavaScript.
+    </noscript>
+  </main>
+
+  <script type="module">
+const harmonicsV2 = await (async () => {
+  // ------------------------------------------------------------
+  // Re-run cleanup: stop any audio left by an earlier execution
+  // of this cell. This is plain JavaScript, so it works in
+  // Observable Notebooks 2.0 without the old invalidation API.
+  // ------------------------------------------------------------
+
+  const CLEANUP_KEY = "__specialFunctionsHarmonicsV2Cleanup";
+
+  if (typeof globalThis[CLEANUP_KEY] === "function") {
+    globalThis[CLEANUP_KEY]();
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+
+  // ------------------------------------------------------------
+  // Musical symbol library
+  //
+  // Upload the companion file as exactly "musical_symbols.svg".
+  // The SVG contains the whole note, clefs, accidentals, and a
+  // five-line reference staff. Its line 3 is the common vertical
+  // registration point for every symbol.
+  // ------------------------------------------------------------
+
+  let symbolText;
+
+  try {
+    const response = await fetch("./musical_symbols.svg");
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    symbolText = await response.text();
+  } catch (error) {
+    throw new Error(
+      'This page requires "musical_symbols.svg" in the same directory. ' +
+      'Serve the directory over HTTP (for example, python -m http.server 8000) ' +
+      'rather than opening the HTML as a file:// URL.'
+    );
+  }
+
+  const symbolDoc = new DOMParser().parseFromString(symbolText, "image/svg+xml");
+  const symbolRoot = symbolDoc.documentElement;
+  const symbolLayer = symbolDoc.getElementById("symbol-layer");
+
+  if (!symbolLayer) {
+    throw new Error('The symbol SVG is missing the expected "symbol-layer" group.');
+  }
+
+  const SOURCE_STAFF_GAP = Number(symbolRoot.getAttribute("data-staff-gap"));
+  const SOURCE_LINE3_Y = Number(symbolRoot.getAttribute("data-staff-line3-y"));
+  const SOURCE_LAYER_TRANSFORM = symbolLayer.getAttribute("transform") || "";
+
+  if (!Number.isFinite(SOURCE_STAFF_GAP) || !Number.isFinite(SOURCE_LINE3_Y)) {
+    throw new Error("The symbol SVG is missing its staff-registration metadata.");
+  }
+
+  const C4 = 261.625565;
+  const C2 = C4 / 4;
+
+  const LETTER_INDEX = {
+    C: 0,
+    D: 1,
+    E: 2,
+    F: 3,
+    G: 4,
+    A: 5,
+    B: 6
+  };
+
+  const pitchSets = {
+    diatonic: {
+      label: "Diatonic",
+      staff: "treble",
+      notes: [
+        { id: "C4", label: "C₄", letter: "C", accidental: "", octave: 4, semitone: 0,  just: [1, 1] },
+        { id: "D4", label: "D₄", letter: "D", accidental: "", octave: 4, semitone: 2,  just: [9, 8] },
+        { id: "E4", label: "E₄", letter: "E", accidental: "", octave: 4, semitone: 4,  just: [5, 4] },
+        { id: "F4", label: "F₄", letter: "F", accidental: "", octave: 4, semitone: 5,  just: [4, 3] },
+        { id: "G4", label: "G₄", letter: "G", accidental: "", octave: 4, semitone: 7,  just: [3, 2] },
+        { id: "A4", label: "A₄", letter: "A", accidental: "", octave: 4, semitone: 9,  just: [5, 3] },
+        { id: "B4", label: "B₄", letter: "B", accidental: "", octave: 4, semitone: 11, just: [15, 8] },
+        { id: "C5", label: "C₅", letter: "C", accidental: "", octave: 5, semitone: 12, just: [2, 1] }
+      ]
+    },
+
+    harmonic: {
+      label: "Harmonic series",
+      staff: "grand",
+      notes: [
+        { id: "H1",  label: "C₂",   letter: "C", accidental: "",  octave: 2, harmonic: 1,  clef: "bass" },
+        { id: "H2",  label: "C₃",   letter: "C", accidental: "",  octave: 3, harmonic: 2,  clef: "bass" },
+        { id: "H3",  label: "G₃",   letter: "G", accidental: "",  octave: 3, harmonic: 3,  clef: "bass" },
+        { id: "H4",  label: "C₄",   letter: "C", accidental: "",  octave: 4, harmonic: 4,  clef: "treble" },
+        { id: "H5",  label: "E₄",   letter: "E", accidental: "",  octave: 4, harmonic: 5,  clef: "treble" },
+        { id: "H6",  label: "G₄",   letter: "G", accidental: "",  octave: 4, harmonic: 6,  clef: "treble" },
+        { id: "H7",  label: "B♭₄*", letter: "B", accidental: "♭", octave: 4, harmonic: 7,  clef: "treble" },
+        { id: "H8",  label: "C₅",   letter: "C", accidental: "",  octave: 5, harmonic: 8,  clef: "treble" },
+        { id: "H9",  label: "D₅",   letter: "D", accidental: "",  octave: 5, harmonic: 9,  clef: "treble" },
+        { id: "H10", label: "E₅",   letter: "E", accidental: "",  octave: 5, harmonic: 10, clef: "treble" }
+      ]
+    },
+
+    chromatic: {
+      label: "Chromatic",
+      staff: "treble",
+      notes: [
+        { id: "C4",  label: "C₄",  letter: "C", accidental: "",  octave: 4, semitone: 0,  just: [1, 1] },
+        { id: "Db4", label: "D♭₄", letter: "D", accidental: "♭", octave: 4, semitone: 1,  just: [16, 15] },
+        { id: "D4",  label: "D₄",  letter: "D", accidental: "",  octave: 4, semitone: 2,  just: [9, 8] },
+        { id: "Eb4", label: "E♭₄", letter: "E", accidental: "♭", octave: 4, semitone: 3,  just: [6, 5] },
+        { id: "E4",  label: "E₄",  letter: "E", accidental: "",  octave: 4, semitone: 4,  just: [5, 4] },
+        { id: "F4",  label: "F₄",  letter: "F", accidental: "",  octave: 4, semitone: 5,  just: [4, 3] },
+        { id: "Fs4", label: "F♯₄", letter: "F", accidental: "♯", octave: 4, semitone: 6,  just: [45, 32] },
+        { id: "G4",  label: "G₄",  letter: "G", accidental: "",  octave: 4, semitone: 7,  just: [3, 2] },
+        { id: "Ab4", label: "A♭₄", letter: "A", accidental: "♭", octave: 4, semitone: 8,  just: [8, 5] },
+        { id: "A4",  label: "A₄",  letter: "A", accidental: "",  octave: 4, semitone: 9,  just: [5, 3] },
+        { id: "Bb4", label: "B♭₄", letter: "B", accidental: "♭", octave: 4, semitone: 10, just: [9, 5] },
+        { id: "B4",  label: "B₄",  letter: "B", accidental: "",  octave: 4, semitone: 11, just: [15, 8] },
+        { id: "C5",  label: "C₅",  letter: "C", accidental: "",  octave: 5, semitone: 12, just: [2, 1] }
+      ]
+    }
+  };
+
+  // ------------------------------------------------------------
+  // Integer / rational helpers
+  // ------------------------------------------------------------
+
+  function gcd(a, b) {
+    a = Math.abs(a);
+    b = Math.abs(b);
+
+    while (b !== 0) {
+      [a, b] = [b, a % b];
+    }
+
+    return a;
+  }
+
+  function gcdArray(values) {
+    return values.reduce((a, b) => gcd(a, b));
+  }
+
+  function lcm(a, b) {
+    return Math.abs(a * b) / gcd(a, b);
+  }
+
+  function lcmArray(values) {
+    return values.reduce((a, b) => lcm(a, b), 1);
+  }
+
+  function reduceFraction(p, q) {
+    const g = gcd(p, q);
+    return [p / g, q / g];
+  }
+
+  function fractionLabel([p, q]) {
+    return q === 1 ? `${p}` : `${p}/${q}`;
+  }
+
+  function rationalInfo(ratios) {
+    const Q = lcmArray(ratios.map(([, q]) => q));
+
+    const rawIntegers = ratios.map(
+      ([p, q]) => p * (Q / q)
+    );
+
+    const g = gcdArray(rawIntegers);
+
+    return {
+      integers: rawIntegers.map(n => n / g),
+      fundamentalRatio: g / Q
+    };
+  }
+
+  // ------------------------------------------------------------
+  // DOM
+  // ------------------------------------------------------------
+
+  const root = document.createElement("div");
+
+  root.innerHTML = `
+    <style>
+      .hv2 {
+        max-width: 780px;
+        margin: 0 auto;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #222;
+      }
+
+      .hv2-controls {
+        display: grid;
+        gap: 0.55rem;
+        margin-bottom: 0.7rem;
+      }
+
+      .hv2-control-row {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+      }
+
+      .hv2-control-label {
+        min-width: 4.8rem;
+        font-size: 0.9rem;
+        font-weight: 650;
+      }
+
+      .hv2-segmented {
+        display: inline-flex;
+        border: 1px solid #aaa;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+
+      .hv2-segmented button {
+        border: 0;
+        border-right: 1px solid #aaa;
+        padding: 0.42rem 0.72rem;
+        background: white;
+        color: #222;
+        font: inherit;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .hv2-segmented button:last-child {
+        border-right: 0;
+      }
+
+      .hv2-segmented button.active {
+        background: #222;
+        color: white;
+      }
+
+      .hv2-instruction {
+        margin: 0 0 0.55rem 0;
+        font-size: 0.94rem;
+        line-height: 1.35;
+      }
+
+      .hv2-staff-wrap,
+      .hv2-wave-wrap {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        background: white;
+        overflow-x: auto;
+      }
+
+      .hv2-staff,
+      .hv2-waves {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .hv2-note {
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .hv2-note .hit-area {
+        fill: transparent;
+      }
+
+      .hv2-note .selection-halo {
+        fill: none;
+        stroke: #2b6fbb;
+        stroke-width: 5;
+        opacity: 0;
+      }
+
+      .hv2-note.selected .selection-halo {
+        opacity: 0.22;
+      }
+
+      .hv2-note.selected .note-label,
+      .hv2-note.selected .ratio-label,
+      .hv2-note.selected .accidental {
+        fill: #2b6fbb;
+        font-weight: 700;
+      }
+
+      .hv2-mode-note {
+        min-height: 1.25rem;
+        margin-top: 0.42rem;
+        text-align: center;
+        color: #666;
+        font-size: 0.82rem;
+        line-height: 1.35;
+      }
+
+      .hv2-readout {
+        min-height: 6.2rem;
+        margin-top: 0.65rem;
+        text-align: center;
+      }
+
+      .hv2-chord {
+        font-size: 1.14rem;
+        font-weight: 700;
+      }
+
+      .hv2-ratio {
+        margin-top: 0.16rem;
+        font-size: 0.98rem;
+      }
+
+      .hv2-repeat,
+      .hv2-comparison {
+        margin-top: 0.15rem;
+        color: #555;
+        font-size: 0.9rem;
+      }
+
+      .hv2-status {
+        min-height: 1.2rem;
+        margin-top: 0.15rem;
+        text-align: center;
+        color: #777;
+        font-size: 0.84rem;
+      }
+
+      .hv2-wave-wrap {
+        margin-top: 0.45rem;
+      }
+
+      .hv2-bottom-controls {
+        margin-top: 0.65rem;
+        text-align: center;
+      }
+
+      .hv2-clear {
+        border: 1px solid #aaa;
+        border-radius: 7px;
+        padding: 0.4rem 0.9rem;
+        background: #f7f7f7;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      @media (max-width: 520px) {
+        .hv2-control-label {
+          min-width: 4.2rem;
+        }
+
+        .hv2-segmented button {
+          padding: 0.4rem 0.52rem;
+          font-size: 0.9rem;
+        }
+      }
+    </style>
+
+    <div class="hv2">
+      <div class="hv2-controls">
+        <div class="hv2-control-row">
+          <div class="hv2-control-label">Pitch set</div>
+          <div class="hv2-segmented hv2-pitch-buttons" role="group" aria-label="Pitch set">
+            <button type="button" data-pitch-set="diatonic">Diatonic</button>
+            <button type="button" data-pitch-set="harmonic">Harmonic series</button>
+            <button type="button" data-pitch-set="chromatic">Chromatic</button>
+          </div>
+        </div>
+
+        <div class="hv2-control-row hv2-tuning-row">
+          <div class="hv2-control-label">Tuning</div>
+          <div class="hv2-segmented hv2-tuning-buttons" role="group" aria-label="Tuning">
+            <button type="button" data-tuning="just">Just</button>
+            <button type="button" data-tuning="equal">Equal</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hv2-instruction">
+        Tap whole notes to add or remove tones. Select up to three notes.
+      </div>
+
+      <div class="hv2-staff-wrap">
+        <svg class="hv2-staff" aria-label="Interactive musical staff"></svg>
+      </div>
+
+      <div class="hv2-mode-note"></div>
+
+      <div class="hv2-readout">
+        <div class="hv2-chord">Select a note</div>
+        <div class="hv2-ratio"></div>
+        <div class="hv2-repeat"></div>
+        <div class="hv2-comparison"></div>
+      </div>
+
+      <div class="hv2-status"></div>
+
+      <div class="hv2-wave-wrap">
+        <svg class="hv2-waves" aria-label="Waveforms of selected notes"></svg>
+      </div>
+
+      <div class="hv2-bottom-controls">
+        <button type="button" class="hv2-clear">Clear</button>
+      </div>
+    </div>
+  `;
+
+  const staffSVG = root.querySelector(".hv2-staff");
+  const waveSVG = root.querySelector(".hv2-waves");
+  const tuningRow = root.querySelector(".hv2-tuning-row");
+  const modeNote = root.querySelector(".hv2-mode-note");
+
+  const chordText = root.querySelector(".hv2-chord");
+  const ratioText = root.querySelector(".hv2-ratio");
+  const repeatText = root.querySelector(".hv2-repeat");
+  const comparisonText = root.querySelector(".hv2-comparison");
+  const statusText = root.querySelector(".hv2-status");
+
+  const pitchButtons = [...root.querySelectorAll("[data-pitch-set]")];
+  const tuningButtons = [...root.querySelectorAll("[data-tuning]")];
+  const clearButton = root.querySelector(".hv2-clear");
+
+  function svgElement(tag, attrs = {}, text = null) {
+    const element = document.createElementNS(NS, tag);
+
+    for (const [key, value] of Object.entries(attrs)) {
+      element.setAttribute(key, value);
+    }
+
+    if (text !== null) {
+      element.textContent = text;
+    }
+
+    return element;
+  }
+
+  // ------------------------------------------------------------
+  // State
+  // ------------------------------------------------------------
+
+  const state = {
+    pitchSet: "diatonic",
+    tuning: "just",
+    selected: new Set()
+  };
+
+  function currentConfig() {
+    return pitchSets[state.pitchSet];
+  }
+
+  function currentNotes() {
+    return currentConfig().notes;
+  }
+
+  function selectedNotes() {
+    return [...state.selected]
+      .sort((a, b) => a - b)
+      .map(i => currentNotes()[i]);
+  }
+
+  function noteFrequency(note) {
+    if (state.pitchSet === "harmonic") {
+      return C2 * note.harmonic;
+    }
+
+    if (state.tuning === "just") {
+      return C4 * note.just[0] / note.just[1];
+    }
+
+    return C4 * Math.pow(2, note.semitone / 12);
+  }
+
+  // ------------------------------------------------------------
+  // Audio
+  // ------------------------------------------------------------
+
+  let audioContext = null;
+  let voices = [];
+  let voiceGeneration = 0;
+
+  async function ensureAudio() {
+    if (!audioContext || audioContext.state === "closed") {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioContext();
+    }
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    return audioContext;
+  }
+
+  function fadeOutVoices() {
+    ++voiceGeneration;
+
+    if (!audioContext) {
+      voices = [];
+      return;
+    }
+
+    const now = audioContext.currentTime;
+
+    for (const { oscillator, gain } of voices) {
+      try {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setTargetAtTime(0.0001, now, 0.012);
+        oscillator.stop(now + 0.07);
+      } catch {
+        // Ignore already-stopped oscillators.
+      }
+    }
+
+    voices = [];
+  }
+
+  function audibleLevel(note, activeCount) {
+    // Pure sine waves at C2/C3 can be weak on laptop and phone speakers.
+    // This changes amplitude only—not pitch or waveform shape.
+    const f = noteFrequency(note);
+    const base = 0.09 / Math.sqrt(activeCount);
+    const bassCompensation = f < 260
+      ? Math.min(1.8, Math.sqrt(260 / f))
+      : 1;
+
+    return base * bassCompensation;
+  }
+
+  async function syncVoices() {
+    const generation = ++voiceGeneration;
+
+    if (audioContext) {
+      const now = audioContext.currentTime;
+
+      for (const { oscillator, gain } of voices) {
+        try {
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setTargetAtTime(0.0001, now, 0.012);
+          oscillator.stop(now + 0.07);
+        } catch {
+          // Ignore already-stopped oscillators.
+        }
+      }
+    }
+
+    voices = [];
+
+    const active = selectedNotes();
+    if (active.length === 0) return;
+
+    const context = await ensureAudio();
+
+    // A second selection/tuning change may have happened while the
+    // browser was resuming the AudioContext.
+    if (generation !== voiceGeneration) return;
+
+    const startAt = context.currentTime + 0.015;
+
+    voices = active.map(note => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = noteFrequency(note);
+
+      const level = audibleLevel(note, active.length);
+
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(level, startAt + 0.025);
+
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(startAt);
+
+      return { oscillator, gain };
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Staff geometry
+  // ------------------------------------------------------------
+
+  function diatonicIndex(note) {
+    return note.octave * 7 + LETTER_INDEX[note.letter];
+  }
+
+  function staffY(note, clef, bottomY, gap) {
+    const bottomIndex = clef === "treble"
+      ? 4 * 7 + LETTER_INDEX.E   // E4
+      : 2 * 7 + LETTER_INDEX.G;  // G2
+
+    return bottomY - (diatonicIndex(note) - bottomIndex) * (gap / 2);
+  }
+
+  function drawStaffLines(svg, x1, x2, bottomY, gap) {
+    for (let i = 0; i < 5; ++i) {
+      const y = bottomY - i * gap;
+
+      svg.append(
+        svgElement("line", {
+          x1,
+          x2,
+          y1: y,
+          y2: y,
+          stroke: "#333",
+          "stroke-width": 1.1
+        })
+      );
+    }
+  }
+
+  function cloneMasterSymbol(id) {
+    const source = symbolDoc.getElementById(id);
+
+    if (!source) {
+      throw new Error(`Missing musical symbol: ${id}`);
+    }
+
+    const clone = source.cloneNode(true);
+    clone.removeAttribute("id");
+    return { source, clone };
+  }
+
+  function placeMasterSymbol(
+    parent,
+    id,
+    x,
+    targetLine3Y,
+    targetGap,
+    { className = "", scaleFactor = 1 } = {}
+  ) {
+    const { source, clone } = cloneMasterSymbol(id);
+    const anchorX = Number(source.getAttribute("data-anchor-x"));
+
+    if (!Number.isFinite(anchorX)) {
+      throw new Error(`Symbol ${id} is missing data-anchor-x.`);
+    }
+
+    const scale = (targetGap / SOURCE_STAFF_GAP) * scaleFactor;
+
+    // The inner group restores the transform inherited from the
+    // Inkscape layer. The outer transform then maps source staff
+    // line 3 to the requested target line and scales by staff gap.
+    const outer = svgElement("g", {
+      class: className || null,
+      transform:
+        `translate(${x} ${targetLine3Y}) ` +
+        `scale(${scale}) ` +
+        `translate(${-anchorX} ${-SOURCE_LINE3_Y})`
+    });
+
+    const inner = svgElement("g", {
+      transform: SOURCE_LAYER_TRANSFORM || null
+    });
+
+    inner.append(clone);
+    outer.append(inner);
+    parent.append(outer);
+
+    return outer;
+  }
+
+  function drawClef(svg, clef, x, bottomY, gap) {
+    const line3Y = bottomY - 2 * gap;
+    const id = clef === "treble"
+      ? "symbol-treble-clef"
+      : "symbol-bass-clef";
+
+    placeMasterSymbol(svg, id, x, line3Y, gap, {
+      className: `music-symbol ${clef}-clef-symbol`
+    });
+  }
+
+  function drawLedgerLines(svg, x, note, clef, bottomY, gap) {
+    const noteIndex = diatonicIndex(note);
+
+    const bottomIndex = clef === "treble"
+      ? 4 * 7 + LETTER_INDEX.E
+      : 2 * 7 + LETTER_INDEX.G;
+
+    const topIndex = bottomIndex + 8;
+
+    for (let idx = bottomIndex - 2; idx >= noteIndex; idx -= 2) {
+      const y = bottomY - (idx - bottomIndex) * (gap / 2);
+
+      svg.append(
+        svgElement("line", {
+          x1: x - 15,
+          x2: x + 15,
+          y1: y,
+          y2: y,
+          stroke: "#333",
+          "stroke-width": 1.1
+        })
+      );
+    }
+
+    for (let idx = topIndex + 2; idx <= noteIndex; idx += 2) {
+      const y = bottomY - (idx - bottomIndex) * (gap / 2);
+
+      svg.append(
+        svgElement("line", {
+          x1: x - 15,
+          x2: x + 15,
+          y1: y,
+          y2: y,
+          stroke: "#333",
+          "stroke-width": 1.1
+        })
+      );
+    }
+  }
+
+  function underNoteLabel(note) {
+    if (state.pitchSet === "harmonic") {
+      return `${note.harmonic}`;
+    }
+
+    if (state.tuning === "just") {
+      return fractionLabel(note.just);
+    }
+
+    if (note.semitone === 0) return "1";
+    if (note.semitone === 12) return "2";
+
+    return null;
+  }
+
+  function appendUnderNoteLabel(group, note, x, y, fontSize) {
+    const text = svgElement("text", {
+      class: "ratio-label",
+      x,
+      y,
+      "text-anchor": "middle",
+      "font-size": fontSize
+    });
+
+    const plain = underNoteLabel(note);
+
+    if (plain !== null) {
+      text.textContent = plain;
+      group.append(text);
+      return;
+    }
+
+    // Equal-tempered labels use true SVG superscripts rather than
+    // programming notation such as 2^(5/12).
+    text.append(
+      svgElement("tspan", {}, "2")
+    );
+
+    text.append(
+      svgElement(
+        "tspan",
+        {
+          "baseline-shift": "super",
+          "font-size": "72%"
+        },
+        `${note.semitone}/12`
+      )
+    );
+
+    group.append(text);
+  }
+
+  // Slightly reduce note heads and accidentals relative to the staff.
+  // Keeping this as a single scale factor makes all pitch-set modes
+  // visually consistent while giving the chromatic staff more breathing room.
+  const NOTE_SYMBOL_SCALE = 0.80;
+  const ACCIDENTAL_SYMBOL_SCALE = 0.75;
+
+  const ACCIDENTAL_SYMBOL = {
+    "♭": "symbol-flat",
+    "♯": "symbol-sharp",
+    "♮": "symbol-natural"
+  };
+
+  function renderWholeNote(svg, note, index, x, y, labelY, ratioY, clef, bottomY, gap = 12) {
+    drawLedgerLines(svg, x, note, clef, bottomY, gap);
+
+    const labelSize = state.pitchSet === "diatonic"
+      ? 18
+      : state.pitchSet === "chromatic"
+        ? 16
+        : 17;
+
+    const ratioSize = state.pitchSet === "diatonic"
+      ? 15
+      : state.pitchSet === "chromatic"
+        ? 13
+        : 14;
+
+    const group = svgElement("g", {
+      class: `hv2-note${state.selected.has(index) ? " selected" : ""}`,
+      "data-note-index": index,
+      tabindex: 0,
+      role: "button",
+      "aria-label": note.label
+    });
+
+    const hitWidth = state.pitchSet === "diatonic"
+      ? 64
+      : state.pitchSet === "chromatic"
+        ? 42
+        : 54;
+
+    const hitHeight = state.pitchSet === "diatonic" ? 58 : 56;
+
+    group.append(
+      svgElement("rect", {
+        class: "hit-area",
+        x: x - hitWidth / 2,
+        y: y - hitHeight / 2,
+        width: hitWidth,
+        height: hitHeight
+      })
+    );
+
+    group.append(
+      svgElement("ellipse", {
+        class: "selection-halo",
+        cx: x,
+        cy: y,
+        rx: 0.96 * gap,
+        ry: 0.66 * gap
+      })
+    );
+
+    if (note.accidental) {
+      const accidentalId = ACCIDENTAL_SYMBOL[note.accidental];
+
+      if (accidentalId) {
+        placeMasterSymbol(
+          group,
+          accidentalId,
+          x - 1.0 * gap,
+          y,
+          gap,
+          {
+            className: "music-symbol accidental-symbol",
+            scaleFactor: ACCIDENTAL_SYMBOL_SCALE
+          }
+        );
+      }
+    }
+
+    // The whole note comes directly from the master SVG. Since its
+    // source line 3 is mapped to y, staff and ledger lines remain
+    // visible through the transparent center of the engraved glyph.
+    placeMasterSymbol(
+      group,
+      "symbol-whole-note",
+      x,
+      y,
+      gap,
+      {
+        className: "music-symbol whole-note-symbol",
+        scaleFactor: NOTE_SYMBOL_SCALE
+      }
+    );
+
+    group.append(
+      svgElement(
+        "text",
+        {
+          class: "note-label",
+          x,
+          y: labelY,
+          "text-anchor": "middle",
+          "font-size": labelSize
+        },
+        note.label
+      )
+    );
+
+    appendUnderNoteLabel(group, note, x, ratioY, ratioSize);
+
+    svg.append(group);
+  }
+
+  function renderStaff() {
+    staffSVG.replaceChildren();
+    staffSVG.style.minWidth = "";
+
+    const config = currentConfig();
+    const notes = config.notes;
+
+    if (config.staff === "grand") {
+      // Harmonic-series mode: use essentially the same apparent notation
+      // scale as the enlarged diatonic staff. Ten notes still fit comfortably
+      // across the phone, so we trade unused horizontal space for larger
+      // clefs, note heads, accidentals, and labels.
+      const width = 560;
+      const height = 400;
+      const x1 = 22;
+      const x2 = 542;
+      const gap = 18;
+      const trebleBottom = 118;
+      const bassBottom = 275;
+
+      staffSVG.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+      drawStaffLines(staffSVG, x1, x2, trebleBottom, gap);
+      drawStaffLines(staffSVG, x1, x2, bassBottom, gap);
+
+      drawClef(staffSVG, "treble", 48, trebleBottom, gap);
+      drawClef(staffSVG, "bass", 48, bassBottom, gap);
+
+      const startX = 88;
+      const endX = 530;
+
+      notes.forEach((note, i) => {
+        const x = startX + i * (endX - startX) / (notes.length - 1);
+        const clef = note.clef;
+        const bottomY = clef === "bass" ? bassBottom : trebleBottom;
+        const y = staffY(note, clef, bottomY, gap);
+
+        renderWholeNote(
+          staffSVG,
+          note,
+          i,
+          x,
+          y,
+          340,
+          368,
+          clef,
+          bottomY,
+          gap
+        );
+      });
+
+      return;
+    }
+
+    // Diatonic and chromatic sets both use one treble staff. The chromatic
+    // scale is deliberately compressed horizontally so all 13 notes remain
+    // on one line, while its staff gap and symbols are now close to the
+    // successful phone-sized diatonic notation.
+    const isChromatic = state.pitchSet === "chromatic";
+    const isDiatonic = state.pitchSet === "diatonic";
+
+    const width = isChromatic ? 600 : 520;
+    const height = isChromatic ? 240 : 235;
+    const x1 = 22;
+    const x2 = width - 18;
+    const gap = 18;
+    const bottomY = 112;
+
+    staffSVG.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    drawStaffLines(staffSVG, x1, x2, bottomY, gap);
+    drawClef(staffSVG, "treble", 48, bottomY, gap);
+
+    const startX = isChromatic ? 82 : 88;
+    const endX = isChromatic ? 568 : 486;
+
+    notes.forEach((note, i) => {
+      const x = startX + i * (endX - startX) / (notes.length - 1);
+      const y = staffY(note, "treble", bottomY, gap);
+
+      renderWholeNote(
+        staffSVG,
+        note,
+        i,
+        x,
+        y,
+        isDiatonic ? 178 : 180,
+        isDiatonic ? 202 : 207,
+        "treble",
+        bottomY,
+        gap
+      );
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Mathematical descriptions
+  // ------------------------------------------------------------
+
+  function exactRationalInfo(active) {
+    if (state.pitchSet === "harmonic") {
+      const info = rationalInfo(active.map(note => [note.harmonic, 1]));
+
+      return {
+        ...info,
+        baseFrequency: C2,
+        commonPeriod: 1 / (C2 * info.fundamentalRatio)
+      };
+    }
+
+    if (state.tuning === "just") {
+      const info = rationalInfo(active.map(note => note.just));
+
+      return {
+        ...info,
+        baseFrequency: C4,
+        commonPeriod: 1 / (C4 * info.fundamentalRatio)
+      };
+    }
+
+    return null;
+  }
+
+  function exactEqualCommonInfo(active) {
+    if (active.length === 1) {
+      return {
+        integers: [1],
+        commonPeriod: 1 / noteFrequency(active[0])
+      };
+    }
+
+    const ordered = [...active].sort((a, b) => a.semitone - b.semitone);
+    const s0 = ordered[0].semitone;
+    const deltas = ordered.map(note => note.semitone - s0);
+
+    if (!deltas.every(delta => delta % 12 === 0)) {
+      return null;
+    }
+
+    const integers = deltas.map(delta => Math.pow(2, delta / 12));
+
+    return {
+      integers,
+      commonPeriod: 1 / noteFrequency(ordered[0])
+    };
+  }
+
+  function intervalJustFraction(a, b) {
+    const [pa, qa] = a.just;
+    const [pb, qb] = b.just;
+
+    return reduceFraction(pb * qa, qb * pa);
+  }
+
+  function equalExpression(deltaSemitones) {
+    if (deltaSemitones === 0) return "1";
+    if (deltaSemitones === 12) return "2";
+    return `2<sup>${deltaSemitones}/12</sup>`;
+  }
+
+  function cyclesSentence(active, integers) {
+    return active
+      .map((note, i) => {
+        const n = integers[i];
+        return `${n} ${note.label} ${n === 1 ? "cycle" : "cycles"}`;
+      })
+      .join(" = ");
+  }
+
+  function renderReadout() {
+    const active = selectedNotes();
+
+    comparisonText.textContent = "";
+
+    if (active.length === 0) {
+      chordText.textContent = "Select a note";
+      ratioText.textContent = "";
+      repeatText.textContent = "";
+      return;
+    }
+
+    chordText.textContent = active.map(note => note.label).join(" + ");
+
+    if (state.pitchSet === "harmonic") {
+      if (active.length === 1) {
+        const note = active[0];
+
+        ratioText.textContent =
+          `Harmonic ${note.harmonic}: f = ${note.harmonic} f₀ = ` +
+          `${noteFrequency(note).toFixed(2)} Hz`;
+
+        repeatText.textContent =
+          `Period = ${(1000 / noteFrequency(note)).toFixed(2)} ms`;
+
+        return;
+      }
+
+      const info = exactRationalInfo(active);
+
+      ratioText.textContent =
+        `Frequency ratio = ${info.integers.join(" : ")}`;
+
+      repeatText.textContent =
+        `One common period: ${cyclesSentence(active, info.integers)}`;
+
+      return;
+    }
+
+    if (state.tuning === "just") {
+      if (active.length === 1) {
+        const note = active[0];
+
+        ratioText.innerHTML =
+          `f/f<sub>C</sub> = ${fractionLabel(note.just)} = ` +
+          `${(note.just[0] / note.just[1]).toFixed(6)}`;
+
+        repeatText.textContent =
+          `f = ${noteFrequency(note).toFixed(2)} Hz`;
+
+        return;
+      }
+
+      const info = exactRationalInfo(active);
+
+      ratioText.textContent =
+        `Frequency ratio = ${info.integers.join(" : ")}`;
+
+      repeatText.textContent =
+        `One common period: ${cyclesSentence(active, info.integers)}`;
+
+      return;
+    }
+
+    // Equal temperament
+    const ordered = [...active].sort((a, b) => a.semitone - b.semitone);
+
+    if (ordered.length === 1) {
+      const note = ordered[0];
+
+      ratioText.innerHTML =
+        `f/f<sub>C</sub> = ${equalExpression(note.semitone)} ≈ ` +
+        `${Math.pow(2, note.semitone / 12).toFixed(6)}`;
+
+      repeatText.textContent =
+        `f = ${noteFrequency(note).toFixed(2)} Hz`;
+
+      return;
+    }
+
+    const s0 = ordered[0].semitone;
+    const expressions = ordered.map(
+      note => equalExpression(note.semitone - s0)
+    );
+
+    ratioText.innerHTML =
+      `Relative frequencies = ${expressions.join(" : ")}`;
+
+    const exact = exactEqualCommonInfo(ordered);
+
+    if (exact) {
+      repeatText.textContent =
+        `Exact frequency ratio = ${exact.integers.join(" : ")}; ` +
+        `a finite common period exists.`;
+    } else {
+      repeatText.textContent =
+        "No exact finite common period.";
+    }
+
+    if (ordered.length === 2) {
+      const [a, b] = ordered;
+      const justFraction = intervalJustFraction(a, b);
+      const justRatio = justFraction[0] / justFraction[1];
+      const equalRatio = Math.pow(2, (b.semitone - a.semitone) / 12);
+      const cents = 1200 * Math.log2(equalRatio / justRatio);
+      const sign = cents >= 0 ? "+" : "−";
+
+      comparisonText.textContent =
+        `Corresponding just interval = ${fractionLabel(justFraction)}; ` +
+        `equal temperament differs by ${sign}${Math.abs(cents).toFixed(2)} cents.`;
+    }
+  }
+
+  // ------------------------------------------------------------
+  // Waveforms
+  // ------------------------------------------------------------
+
+  function pathForFunction(f, x0, x1, y0, amplitude, tMax, samples = 1600) {
+    let d = "";
+
+    for (let i = 0; i < samples; ++i) {
+      const u = i / (samples - 1);
+      const t = u * tMax;
+      const x = x0 + u * (x1 - x0);
+      const y = y0 - amplitude * f(t);
+
+      d += `${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+    }
+
+    return d;
+  }
+
+  function justComparisonPeriod(active) {
+    if (state.pitchSet === "harmonic") return null;
+
+    const info = rationalInfo(active.map(note => note.just));
+    return 1 / (C4 * info.fundamentalRatio);
+  }
+
+  function waveWindow(active, exactInfo) {
+    const MAX_WINDOW = 0.060;
+    const MIN_WINDOW = 0.012;
+
+    if (active.length === 1) {
+      return Math.min(3 / noteFrequency(active[0]), MAX_WINDOW);
+    }
+
+    if (exactInfo) {
+      return Math.min(
+        Math.max(exactInfo.commonPeriod * 1.12, MIN_WINDOW),
+        MAX_WINDOW
+      );
+    }
+
+    const justPeriod = justComparisonPeriod(active);
+
+    if (justPeriod !== null) {
+      return Math.min(
+        Math.max(justPeriod * 1.12, MIN_WINDOW),
+        MAX_WINDOW
+      );
+    }
+
+    return 0.040;
+  }
+
+  function renderWaves() {
+    waveSVG.replaceChildren();
+
+    const active = selectedNotes();
+
+    if (active.length === 0) {
+      waveSVG.setAttribute("viewBox", "0 0 700 130");
+
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: 350,
+            y: 68,
+            "text-anchor": "middle",
+            "font-size": 23,
+            fill: "#777"
+          },
+          "Waveforms will appear here."
+        )
+      );
+
+      return;
+    }
+
+    let exactInfo = null;
+
+    if (state.pitchSet === "harmonic" || state.tuning === "just") {
+      exactInfo = exactRationalInfo(active);
+    } else {
+      exactInfo = exactEqualCommonInfo(active);
+    }
+
+    const tMax = waveWindow(active, exactInfo);
+    const showSum = active.length > 1;
+    const laneCount = active.length + (showSum ? 1 : 0);
+
+    const top = 60;
+    const laneHeight = 78;
+    const bottom = 48;
+    const height = top + laneCount * laneHeight + bottom;
+
+    waveSVG.setAttribute("viewBox", `0 0 700 ${height}`);
+
+    const x0 = 108;
+    const x1 = 680;
+    const plotBottom = top + laneCount * laneHeight - 22;
+
+    if (exactInfo && exactInfo.commonPeriod <= tMax) {
+      const xRepeat = x0 + (exactInfo.commonPeriod / tMax) * (x1 - x0);
+
+      waveSVG.append(
+        svgElement("line", {
+          x1: xRepeat,
+          x2: xRepeat,
+          y1: 31,
+          y2: plotBottom,
+          stroke: "#888",
+          "stroke-width": 1.2,
+          "stroke-dasharray": "5 5"
+        })
+      );
+
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: xRepeat,
+            y: 24,
+            "text-anchor": "middle",
+            "font-size": 20,
+            fill: "#666"
+          },
+          `common repeat ${(1000 * exactInfo.commonPeriod).toFixed(1)} ms`
+        )
+      );
+    } else if (exactInfo) {
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: x1,
+            y: 24,
+            "text-anchor": "end",
+            "font-size": 20,
+            fill: "#666"
+          },
+          `exact repeat ${(1000 * exactInfo.commonPeriod).toFixed(1)} ms — beyond plot window →`
+        )
+      );
+    } else {
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: x1,
+            y: 24,
+            "text-anchor": "end",
+            "font-size": 20,
+            fill: "#666"
+          },
+          "no exact finite common repeat"
+        )
+      );
+    }
+
+    active.forEach((note, i) => {
+      const y0 = top + i * laneHeight;
+
+      waveSVG.append(
+        svgElement("line", {
+          x1: x0,
+          x2: x1,
+          y1: y0,
+          y2: y0,
+          stroke: "#ddd",
+          "stroke-width": 1
+        })
+      );
+
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: 14,
+            y: y0 + 5,
+            "font-size": 22,
+            fill: "#333"
+          },
+          note.label
+        )
+      );
+
+      waveSVG.append(
+        svgElement("path", {
+          d: pathForFunction(
+            t => Math.sin(2 * Math.PI * noteFrequency(note) * t),
+            x0,
+            x1,
+            y0,
+            21,
+            tMax
+          ),
+          fill: "none",
+          stroke: "#2b6fbb",
+          "stroke-width": 1.55
+        })
+      );
+    });
+
+    if (showSum) {
+      const y0 = top + active.length * laneHeight;
+
+      waveSVG.append(
+        svgElement("line", {
+          x1: x0,
+          x2: x1,
+          y1: y0,
+          y2: y0,
+          stroke: "#ccc",
+          "stroke-width": 1
+        })
+      );
+
+      waveSVG.append(
+        svgElement(
+          "text",
+          {
+            x: 14,
+            y: y0 + 5,
+            "font-size": 22,
+            fill: "#333"
+          },
+          "sum"
+        )
+      );
+
+      waveSVG.append(
+        svgElement("path", {
+          d: pathForFunction(
+            t => {
+              let value = 0;
+
+              for (const note of active) {
+                value += Math.sin(2 * Math.PI * noteFrequency(note) * t);
+              }
+
+              return value / active.length;
+            },
+            x0,
+            x1,
+            y0,
+            24,
+            tMax
+          ),
+          fill: "none",
+          stroke: "#222",
+          "stroke-width": 1.8
+        })
+      );
+    }
+
+    const axisY = top + laneCount * laneHeight - 8;
+
+    waveSVG.append(
+      svgElement(
+        "text",
+        {
+          x: x0,
+          y: axisY,
+          "text-anchor": "start",
+          "font-size": 18,
+          fill: "#777"
+        },
+        "0 ms"
+      )
+    );
+
+    waveSVG.append(
+      svgElement(
+        "text",
+        {
+          x: x1,
+          y: axisY,
+          "text-anchor": "end",
+          "font-size": 18,
+          fill: "#777"
+        },
+        `${(1000 * tMax).toFixed(1)} ms`
+      )
+    );
+  }
+
+  // ------------------------------------------------------------
+  // Controls and mode text
+  // ------------------------------------------------------------
+
+  function renderControls() {
+    pitchButtons.forEach(button => {
+      const active = button.dataset.pitchSet === state.pitchSet;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+
+    tuningButtons.forEach(button => {
+      const active = button.dataset.tuning === state.tuning;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+
+    tuningRow.style.display = state.pitchSet === "harmonic" ? "none" : "flex";
+  }
+
+  function renderModeNote() {
+    if (state.pitchSet === "harmonic") {
+      modeNote.textContent =
+        "The integers under the notes are harmonic numbers; fₙ = n f₀ with f₀ = C₂ = 65.41 Hz. " +
+        "*Harmonic 7 is the harmonic seventh: about 31 cents flatter than equal-tempered B♭₄. " +
+        "The lowest pure sine tones may be inaudible on small phone speakers; headphones or external speakers reproduce them better.";
+      return;
+    }
+
+    if (state.pitchSet === "chromatic" && state.tuning === "just") {
+      modeNote.textContent =
+        "C-centered 5-limit just tuning. Enharmonic choices are not unique; " +
+        "this is one consistent chromatic realization.";
+      return;
+    }
+
+    if (state.tuning === "equal") {
+      modeNote.textContent =
+        "12-tone equal temperament: each semitone multiplies frequency by 2^(1/12).";
+      return;
+    }
+
+    modeNote.textContent = "C-major just intonation.";
+  }
+
+  function renderAll() {
+    renderControls();
+    renderStaff();
+    renderModeNote();
+    renderReadout();
+    renderWaves();
+  }
+
+  function clearSelection({ stopAudio = true } = {}) {
+    state.selected.clear();
+    statusText.textContent = "";
+
+    if (stopAudio) {
+      fadeOutVoices();
+    }
+  }
+
+  async function toggleNote(index) {
+    statusText.textContent = "";
+
+    if (state.selected.has(index)) {
+      state.selected.delete(index);
+    } else {
+      if (state.selected.size >= 3) {
+        statusText.textContent =
+          "Select at most three notes; remove one before adding another.";
+        return;
+      }
+
+      state.selected.add(index);
+    }
+
+    await syncVoices();
+    renderAll();
+  }
+
+  pitchButtons.forEach(button => {
+    button.addEventListener("click", () => {
+      const next = button.dataset.pitchSet;
+      if (next === state.pitchSet) return;
+
+      clearSelection();
+      state.pitchSet = next;
+      renderAll();
+    });
+  });
+
+  tuningButtons.forEach(button => {
+    button.addEventListener("click", async () => {
+      const next = button.dataset.tuning;
+      if (next === state.tuning) return;
+
+      state.tuning = next;
+
+      if (state.selected.size > 0) {
+        await syncVoices();
+      }
+
+      renderAll();
+    });
+  });
+
+  staffSVG.addEventListener("click", event => {
+    const group = event.target.closest("[data-note-index]");
+    if (!group) return;
+
+    toggleNote(Number(group.dataset.noteIndex));
+  });
+
+  staffSVG.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    const group = event.target.closest("[data-note-index]");
+    if (!group) return;
+
+    event.preventDefault();
+    toggleNote(Number(group.dataset.noteIndex));
+  });
+
+  clearButton.addEventListener("click", () => {
+    clearSelection();
+    renderAll();
+  });
+
+  // ------------------------------------------------------------
+  // Cleanup function used automatically on the next cell run.
+  // ------------------------------------------------------------
+
+  globalThis[CLEANUP_KEY] = () => {
+    fadeOutVoices();
+
+    if (audioContext && audioContext.state !== "closed") {
+      try {
+        audioContext.close();
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+
+    audioContext = null;
+  };
+
+  renderAll();
+  return root;
+})();
+
+const mount = document.getElementById("harmonics-exploration");
+mount.replaceChildren(harmonicsV2);
+
+  </script>
+</body>
+</html>
