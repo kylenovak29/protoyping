@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f6f2">
+<title>Lives in mathematics · Special Functions</title>
+<style>
+:root { color-scheme: light; --ink:#242420; --muted:#77766e; --paper:#fffefb; --page:#f7f6f2; --line:#373730; --rule:#e9e7df; --accent:#967246; }
+* { box-sizing: border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--page); color:var(--ink); font-family:Georgia, 'Times New Roman', serif; -webkit-font-smoothing:antialiased; }
+button,input { font:inherit; }
+button { cursor:pointer; }
+.page { max-width:850px; margin:0 auto; background:var(--paper); min-height:100dvh; border-left:1px solid #eeece6; border-right:1px solid #eeece6; }
+.intro { padding:25px 20px 17px; }
+.eyebrow { font:10px/1.3 system-ui,sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#847f74; font-weight:700; }
+.headline { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px; }
+h1 { font-weight:normal; font-size:clamp(27px,6vw,37px); line-height:1.06; letter-spacing:-.035em; margin:0; }
+.iconbutton { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; width:40px; height:40px; background:transparent; border:1px solid #dedbd2; border-radius:50%; color:var(--ink); }
+.iconbutton:hover,.iconbutton:focus-visible { border-color:#a09a8c; background:#f4f2ed; }
+.lead { margin:11px 0 0; color:#5f5d55; font-size:14px; line-height:1.48; max-width:530px; }
+.quick { margin:14px 0 0; font:12px/1.4 system-ui,sans-serif; color:#757269; display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.quick button { border:0; border-bottom:1px solid #b9b2a4; background:none; padding:2px 0; color:#534536; font-weight:600; font-size:12px; }
+.quick button:hover,.quick button:focus-visible { color:#12110d; border-bottom-color:#12110d; }
+.searchbox { display:none; padding-top:14px; }
+.searchbox.open { display:block; }
+.searchrow { display:flex; align-items:center; gap:8px; }
+.searchrow input { width:100%; border:1px solid #ccc7b8; background:#fff; padding:11px 12px; border-radius:8px; font:15px system-ui,sans-serif; outline-color:#917148; }
+.searchrow button { flex:0 0 auto; border:0; background:none; color:#605b54; font:13px system-ui,sans-serif; padding:10px 2px; }
+#results { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+#results button { border:1px solid #dad5c9; border-radius:18px; padding:5px 9px; font:12px system-ui,sans-serif; background:#faf9f6; color:#4d473d; }
+#results .nothing { font:12px system-ui,sans-serif; color:#8b867c; }
+.figure { border-top:1px solid #eeeae2; }
+.axis-wrap { position:sticky; top:0; z-index:3; background:rgba(255,254,251,.98); box-shadow:0 2px 8px #38301a08; border-bottom:1px solid #eeeae2; height:53px; }
+#axis { width:100%; height:53px; display:block; }
+#timeline { width:100%; display:block; overflow:visible; }
+.axis-label { fill:#5d5b52; font:12px Georgia,serif; }
+.axis-label.major { fill:#3b3b34; font-size:14px; }
+.grid.major { stroke:#cbc8c1; stroke-width:1.4; }
+.grid.minor { stroke:#eceae6; stroke-width:1; }
+.life-line { stroke:#343530; stroke-width:1.65; stroke-linecap:round; }
+.row-bg { fill:transparent; }
+.life-row { cursor:pointer; outline:none; }
+.life-row:hover .row-bg,.life-row:focus .row-bg { fill:#f4f0e8; }
+.life-row.selected .row-bg { fill:#f0eadf; }
+.life-row.selected .life-line { stroke:#785630; stroke-width:2.25; }
+.life-text { font:15.5px Georgia,'Times New Roman',serif; fill:#2d2c28; text-anchor:middle; dominant-baseline:middle; stroke:var(--paper); stroke-width:6; stroke-linejoin:round; paint-order:stroke fill; }
+.life-row:hover .life-text,.life-row.selected .life-text { stroke:#f0eadf; }
+.profile-dot { fill:#a47d4b; }
+.legend { margin:5px 19px 0; padding:10px 0 22px; border-top:1px solid #f0ede7; color:#928e85; font:11px/1.5 system-ui,sans-serif; }
+.legend .dot { color:#a47d4b; font-size:15px; }
+#veil { position:fixed; inset:0; background:#24231f44; z-index:8; opacity:0; pointer-events:none; transition:opacity .20s ease; }
+#veil.visible { opacity:1; pointer-events:auto; }
+.sheet { position:fixed; z-index:9; bottom:0; left:0; right:0; max-height:min(76dvh,680px); overflow-y:auto; overscroll-behavior:contain; background:#fffefb; border-radius:17px 17px 0 0; box-shadow:0 -8px 50px #29262024; transform:translateY(103%); visibility:hidden; transition:transform .24s ease, visibility .24s; padding:19px 19px max(23px, env(safe-area-inset-bottom)); }
+.sheet.visible { transform:translateY(0); visibility:visible; }
+.sheet-grip { position:absolute; top:8px; left:calc(50% - 18px); width:36px; height:4px; border-radius:4px; background:#dfddd5; }
+.sheet-top { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:5px 0 15px; }
+.sheet-kicker { font:10px system-ui,sans-serif; color:#8d8273; letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
+.close { border:0; background:#f1efe9; width:32px; height:32px; border-radius:50%; font:21px/1 system-ui,sans-serif; color:#555047; }
+.profile-head { display:flex; gap:16px; align-items:flex-start; }
+.portrait-frame { position:relative; width:108px; height:136px; flex-shrink:0; background:#e6e2d9; overflow:hidden; border:1px solid #dcd8cd; border-radius:4px; display:none; }
+.portrait-frame.show { display:block; }
+.portrait-frame img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; filter:saturate(.85); }
+.portrait-fallback { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9c968c; gap:8px; }
+.portrait-fallback b { font:normal 64px Georgia,serif; color:#c0b9ad; }
+.portrait-fallback small { font:9px/1.4 system-ui,sans-serif; text-align:center; padding:0 10px; }
+.person-title { font-size:clamp(21px,5vw,27px); font-weight:normal; line-height:1.1; margin:0; letter-spacing:-.02em; }
+.person-years { margin-top:6px; color:#8d7960; font:14px system-ui,sans-serif; letter-spacing:.03em; }
+.person-about { font:13px/1.5 Georgia,serif; margin-top:10px; color:#4f4a40; }
+.profile-body { font-size:15px; line-height:1.55; padding-top:14px; }
+.profile-body p { margin:0 0 13px; }
+.section-label { color:#95816a; text-transform:uppercase; letter-spacing:.1em; font:10px system-ui,sans-serif; font-weight:700; margin-bottom:6px; }
+.rule { border:0; border-top:1px solid #eae6df; margin:12px 0 15px; }
+.credits { font:11px/1.55 system-ui,sans-serif; color:#837f75; padding-top:7px; }
+.credits a { color:#6c5941; text-decoration:underline; text-underline-offset:2px; }
+.unsigned { color:#77736b; font:14px/1.6 Georgia,serif; margin:0; }
+:focus-visible { outline:2px solid #a47d4b; outline-offset:2px; }
+@media (min-width:760px) {
+ .intro { padding:35px 44px 22px; }
+ .figure { margin:0 30px; }
+ .legend { margin:5px 38px 0; }
+ .sheet { width:min(425px,calc(100vw - 40px)); left:auto; right:30px; bottom:26px; max-height:calc(100dvh - 52px); border-radius:16px; padding:22px 25px 24px; box-shadow:0 16px 70px #24211d37; }
+ .sheet-grip { display:none; }
+}
+@media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto} .sheet,#veil {transition:none} }
+</style>
+</head>
+<body>
+<div class="page">
+ <header class="intro">
+  <div class="eyebrow">Special Functions of Mathematical Physics · An illustrated chronology</div>
+  <div class="headline"><h1>Lives in mathematics</h1><button id="find" class="iconbutton" aria-label="Find a person" aria-expanded="false" title="Find a person"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 5 5"/></svg></button></div>
+  <p class="lead">A chronology of the people and ideas encountered in the book. Scroll through the years and tap any name to learn more.</p>
+  <div class="quick">Illustrated profiles: <button data-jump="euler">Euler</button><span>·</span><button data-jump="fourier">Fourier</button><span>·</span><button data-jump="bessel">Bessel</button></div>
+  <div id="searchbox" class="searchbox"><div class="searchrow"><input id="search" type="search" placeholder="Find a name…" autocomplete="off" aria-label="Search by name"><button id="hideSearch">Close</button></div><div id="results"></div></div>
+ </header>
+ <section class="figure" aria-label="Chronology of 41 lives">
+  <div class="axis-wrap"><svg id="axis" aria-hidden="true"></svg></div>
+  <svg id="timeline" role="list" aria-label="Historical lifelines; each row is selectable"></svg>
+ </section>
+ <footer class="legend"><span class="dot">●</span> Illustrated profile available <span style="margin:0 9px;color:#cbc5ba">·</span> Scroll to explore 41 lives</footer>
+</div>
+<div id="veil" aria-hidden="true"></div>
+<aside id="sheet" class="sheet" role="dialog" aria-modal="true" aria-label="Biographical profile" aria-hidden="true">
+  <div class="sheet-grip"></div>
+  <div class="sheet-top"><div class="sheet-kicker">From the chronology</div><button id="close" class="close" aria-label="Close profile">×</button></div>
+  <div id="profile"></div>
+</aside>
+<script id="chronology-data" type="application/json">{"meta":{"title":"Lives in mathematics","subtitle":"Mathematicians, physicists, and other figures mentioned in Special Functions of Mathematical Physics","yearStart":1635,"yearEnd":1965,"source":"Transcribed from the supplied LaTeX chronology, keeping its original order and dates."},"people":[{"id":"newton","name":"Newton","born":1643,"died":1727},{"id":"leibniz","name":"Leibniz","born":1646,"died":1716},{"id":"taylor","name":"Taylor","born":1685,"died":1731},{"id":"euler","name":"Euler","born":1707,"died":1783,"fullName":"Leonhard Euler","biography":"Euler was a Swiss mathematician whose extraordinary range extended from mechanics and astronomy to the foundations of mathematical analysis. Working for much of his career in St. Petersburg and Berlin, he helped shape both the language and the methods of modern mathematics.","connection":"His work brought the gamma and beta functions into systematic analysis. The gamma function extends the factorial to noninteger arguments, making it a natural starting point for the study of special functions.","portrait":{"src":"https://upload.wikimedia.org/wikipedia/commons/a/a7/EulerLeonhard.jpg","artist":"Jakob Emanuel Handmann (1753)","credit":"Kunstmuseum Basel / Wikimedia Commons · Public domain","source":"https://commons.wikimedia.org/wiki/File:EulerLeonhard.jpg"},"references":[{"label":"MacTutor biography","url":"https://mathshistory.st-andrews.ac.uk/Biographies/Euler/"}]},{"id":"laplace","name":"Laplace","born":1749,"died":1827},{"id":"mascheroni","name":"Mascheroni","born":1750,"died":1800},{"id":"legendre","name":"Legendre","born":1752,"died":1833},{"id":"chladni","name":"Chladni","born":1756,"died":1827},{"id":"fourier","name":"Fourier","born":1768,"died":1830,"fullName":"Jean-Baptiste Joseph Fourier","biography":"Fourier combined mathematics with an unusually varied public life, including service during Napoleon’s expedition to Egypt and later work as a government administrator. His studies of heat conduction transformed how mathematicians describe changing physical systems.","connection":"In his 1822 Analytical Theory of Heat, Fourier used trigonometric series to represent temperature distributions. These series became a central tool for solving differential equations and understanding waves, vibrations, and diffusion.","portrait":{"src":"https://upload.wikimedia.org/wikipedia/commons/a/aa/Joseph_Fourier.jpg","artist":"Amédée Geille, after Jules Boilly (c. 1823)","credit":"Wikimedia Commons · Public domain","source":"https://commons.wikimedia.org/wiki/File:Joseph_Fourier.jpg"},"references":[{"label":"MacTutor biography","url":"https://mathshistory.st-andrews.ac.uk/Biographies/Fourier/"}]},{"id":"germain","name":"Germain","born":1776,"died":1831},{"id":"gauss","name":"Gauss","born":1777,"died":1855},{"id":"poisson","name":"Poisson","born":1781,"died":1840},{"id":"bessel","name":"Bessel","born":1784,"died":1846,"fullName":"Friedrich Wilhelm Bessel","biography":"Bessel left formal schooling as a teenager and entered commercial work before teaching himself the astronomy and mathematics that made him a leading observer of his age. He helped establish the first reliable stellar parallax measurement, bringing the distances of stars within reach.","connection":"While studying planetary motion, Bessel developed a systematic account of the functions now named for him. Related functions had appeared earlier in mathematics; today they arise naturally in cylindrical waves, heat flow, and the vibration of circular membranes.","portrait":{"src":"https://upload.wikimedia.org/wikipedia/commons/b/bb/Friedrich_Wilhelm_Bessel.jpeg","artist":"Johann Eduard Wolff (1834)","credit":"Wikimedia Commons · Public domain","source":"https://commons.wikimedia.org/wiki/File:Friedrich_Wilhelm_Bessel.jpeg"},"references":[{"label":"MacTutor biography","url":"https://mathshistory.st-andrews.ac.uk/Biographies/Bessel/"}]},{"id":"cauchy","name":"Cauchy","born":1789,"died":1857},{"id":"sterling","name":"Sterling","born":1790,"died":1878},{"id":"rodrigues","name":"Rodrigues","born":1795,"died":1851},{"id":"airy","name":"Airy","born":1801,"died":1892},{"id":"sturm","name":"Sturm","born":1803,"died":1855},{"id":"dirichlet","name":"Dirichlet","born":1805,"died":1859},{"id":"hamilton","name":"Hamilton","born":1805,"died":1865},{"id":"laurent","name":"Laurent","born":1807,"died":1853},{"id":"liouville","name":"Liouville","born":1809,"died":1882},{"id":"schlafli","name":"Schläfli","born":1814,"died":1895},{"id":"weierstrass","name":"Weierstrass","born":1815,"died":1897},{"id":"lovelace","name":"Lovelace","born":1815,"died":1852},{"id":"chebyshev","name":"Chebyshev","born":1821,"died":1894},{"id":"hermite","name":"Hermite","born":1822,"died":1901},{"id":"kronecker","name":"Kronecker","born":1823,"died":1891},{"id":"thomas-kelvin","name":"Thomas (Kelvin)","born":1824,"died":1907},{"id":"riemann","name":"Riemann","born":1826,"died":1866},{"id":"fuchs","name":"Fuchs","born":1833,"died":1902},{"id":"laguerre","name":"Laguerre","born":1834,"died":1886},{"id":"moriarty","name":"Moriarty","born":1835,"died":1891},{"id":"jordan","name":"Jordan","born":1838,"died":1922},{"id":"hankel","name":"Hankel","born":1839,"died":1873},{"id":"frobenius","name":"Frobenius","born":1849,"died":1917},{"id":"gram","name":"Gram","born":1850,"died":1916},{"id":"schmidt","name":"Schmidt","born":1876,"died":1959},{"id":"schrodinger","name":"Schrödinger","born":1877,"died":1961},{"id":"schauder","name":"Schauder","born":1899,"died":1943},{"id":"zipf","name":"Zipf","born":1902,"died":1950}]}</script>
+<script>
+(()=>{
+'use strict';
+const data=JSON.parse(document.getElementById('chronology-data').textContent);
+const people=data.people, byId=new Map(people.map(p=>[p.id,p]));
+const svg=document.getElementById('timeline'), axis=document.getElementById('axis');
+const pane=document.getElementById('sheet'), veil=document.getElementById('veil'), profile=document.getElementById('profile');
+const searchbox=document.getElementById('searchbox'), searchInput=document.getElementById('search'), results=document.getElementById('results');
+const NS='http://www.w3.org/2000/svg', ROW_H=43, PAD_Y=9;
+const START=data.meta.yearStart, END=data.meta.yearEnd;
+let selected=null,lastFocus=null;
+const el=(tag,attrs={},txt)=>{const n=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(txt!==undefined)n.textContent=txt;return n};
+const xFor=(year,w)=>14+(w-28)*(year-START)/(END-START);
+const normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function draw(){
+ const w=Math.max(260,Math.round(svg.getBoundingClientRect().width));
+ const h=PAD_Y*2+people.length*ROW_H;
+ svg.setAttribute('viewBox',`0 0 ${w} ${h}`); svg.setAttribute('height',h);
+ axis.setAttribute('viewBox',`0 0 ${w} 53`);
+ svg.replaceChildren();axis.replaceChildren();
+ for(let y=1650;y<=1950;y+=50){
+   const xx=xFor(y,w),major=y%100===0;
+   svg.appendChild(el('line',{x1:xx,y1:0,x2:xx,y2:h,class:`grid ${major?'major':'minor'}`}));
+   axis.appendChild(el('line',{x1:xx,y1:40,x2:xx,y2:53,class:`grid ${major?'major':'minor'}`}));
+   if(major)axis.appendChild(el('text',{x:xx,y:27,'text-anchor':'middle',class:'axis-label major'},String(y)));
+ }
+ const axisYear=xFor(1950,w);axis.appendChild(el('text',{x:Math.min(w-18,axisYear+1),y:45,'text-anchor':'middle',class:'axis-label'},''));
+ for(const [i,p] of people.entries()){
+   const y=PAD_Y+i*ROW_H+ROW_H/2;
+   const group=el('g',{'class':'life-row'+(selected===p.id?' selected':''),'data-id':p.id,role:'button',tabindex:'0','aria-label':`${p.name}, ${p.born} to ${p.died}${p.biography?', illustrated profile':''}`});
+   group.appendChild(el('rect',{x:0,y:y-ROW_H/2,width:w,height:ROW_H,class:'row-bg'}));
+   group.appendChild(el('line',{x1:xFor(p.born,w),y1:y,x2:xFor(p.died,w),y2:y,class:'life-line'}));
+   // Outlined white type visually interrupts the line, just as the TikZ fill does.
+   group.appendChild(el('text',{x:(xFor(p.born,w)+xFor(p.died,w))/2,y:y+0.5,class:'life-text'},p.name));
+   if(p.biography) group.appendChild(el('circle',{cx:w-9,cy:y,r:2.6,class:'profile-dot'}));
+   group.addEventListener('click',()=>openPerson(p.id,group));
+   group.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPerson(p.id,group);}});
+   svg.appendChild(group);
+ }
+}
+function openPerson(id,target){
+ const p=byId.get(id);if(!p)return;
+ lastFocus=target||document.activeElement; selected=id;
+ document.querySelectorAll('.life-row').forEach(r=>r.classList.toggle('selected',r.dataset.id===id));
+ profile.replaceChildren();
+ const h=document.createElement('div');h.className='profile-head';
+ if(p.portrait){
+  const frame=document.createElement('div');frame.className='portrait-frame show';
+  const fall=document.createElement('div');fall.className='portrait-fallback';
+  const initial=document.createElement('b');initial.textContent=p.name[0];
+  const hint=document.createElement('small');hint.textContent='Portrait loads online';
+  fall.append(initial,hint);frame.appendChild(fall);
+  const img=document.createElement('img');img.src=p.portrait.src;img.alt=`Historical portrait of ${p.fullName||p.name}`;img.loading='eager';
+  img.onerror=()=>{img.style.display='none';};frame.appendChild(img);h.appendChild(frame);
+ }
+ const ident=document.createElement('div'); ident.style.minWidth='0';
+ const title=document.createElement('h2');title.className='person-title';title.textContent=p.fullName||p.name;
+ const dates=document.createElement('div');dates.className='person-years';dates.textContent=`${p.born}–${p.died}`;
+ ident.append(title,dates);
+ if(!p.biography){ const note=document.createElement('p');note.className='person-about';note.textContent='Biographical notes and connections to the book will be added here.';ident.appendChild(note); }
+ h.appendChild(ident);profile.appendChild(h);
+ if(p.biography){
+  const body=document.createElement('div');body.className='profile-body';
+  let label=document.createElement('div');label.className='section-label';label.textContent='A life';body.appendChild(label);
+  let para=document.createElement('p');para.textContent=p.biography;body.appendChild(para);
+  body.appendChild(document.createElement('hr')).className='rule';
+  label=document.createElement('div');label.className='section-label';label.textContent='Connection to the book';body.appendChild(label);
+  para=document.createElement('p');para.textContent=p.connection;body.appendChild(para);
+  const cred=document.createElement('div');cred.className='credits';
+  if(p.portrait){
+   const link=document.createElement('a');link.href=p.portrait.source;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Portrait source';
+   cred.append('Portrait: '+p.portrait.artist+' · ',link,' · '+p.portrait.credit+'. ');
+  }
+  if(p.references?.length){
+    const r=p.references[0],link=document.createElement('a');link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=r.label;
+    cred.append('Further reading: ',link,'.');
+  }
+  body.appendChild(cred);profile.appendChild(body);
+ }
+ pane.classList.add('visible');veil.classList.add('visible');
+ pane.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';
+ pane.scrollTop=0;document.getElementById('close').focus({preventScroll:true});
+}
+function closePerson(){
+ if(!pane.classList.contains('visible'))return;
+ pane.classList.remove('visible');veil.classList.remove('visible');
+ pane.setAttribute('aria-hidden','true');document.body.style.overflow='';
+ if(lastFocus?.isConnected) lastFocus.focus({preventScroll:true});
+}
+function goTo(id){
+ const p=byId.get(id);if(!p)return;
+ closePerson();
+ const group=[...svg.querySelectorAll('.life-row')].find(r=>r.dataset.id===id);
+ if(!group)return;
+ const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ group.scrollIntoView({behavior:reduced?'instant':'smooth',block:'center'});
+ window.setTimeout(()=>openPerson(id,group),reduced?0:300);
+ searchbox.classList.remove('open');document.getElementById('find').setAttribute('aria-expanded','false');
+}
+function renderSearch(){
+ const q=normalize(searchInput.value.trim()); results.replaceChildren();
+ if(!q)return;
+ const matches=people.filter(p=>normalize(p.name).includes(q)||normalize(p.fullName||'').includes(q)).slice(0,12);
+ if(!matches.length){const n=document.createElement('span');n.className='nothing';n.textContent='No matching name';results.appendChild(n);return;}
+ for(const p of matches){const b=document.createElement('button');b.textContent=`${p.name} · ${p.born}`;b.addEventListener('click',()=>goTo(p.id));results.appendChild(b);}
+}
+document.getElementById('find').addEventListener('click',()=>{
+ const open=searchbox.classList.toggle('open');document.getElementById('find').setAttribute('aria-expanded',String(open));if(open)searchInput.focus();
+});
+document.getElementById('hideSearch').addEventListener('click',()=>{searchbox.classList.remove('open');searchInput.value='';results.replaceChildren();document.getElementById('find').setAttribute('aria-expanded','false');});
+searchInput.addEventListener('input',renderSearch);
+searchInput.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=normalize(searchInput.value.trim());const p=people.find(p=>normalize(p.name).includes(q)||normalize(p.fullName||'').includes(q));if(q&&p)goTo(p.id);}});
+document.querySelectorAll('[data-jump]').forEach(b=>b.addEventListener('click',()=>goTo(b.dataset.jump)));
+document.getElementById('close').addEventListener('click',closePerson);veil.addEventListener('click',closePerson);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePerson();if(e.key==='Tab'&&pane.classList.contains('visible')){
+ // Keep keyboard focus within the open dialog.
+ const focusable=[...pane.querySelectorAll('button,a[href]')].filter(n=>n.offsetParent!==null);
+ if(!focusable.length)return;
+ if(e.shiftKey&&document.activeElement===focusable[0]){e.preventDefault();focusable[focusable.length-1].focus();}
+ else if(!e.shiftKey&&document.activeElement===focusable[focusable.length-1]){e.preventDefault();focusable[0].focus();}
+}});
+new ResizeObserver(()=>draw()).observe(svg.parentElement);
+draw();
+})();
+</script>
+</body>
+</html>
